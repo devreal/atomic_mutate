@@ -1,8 +1,12 @@
 
 #include "mutate.h"
+#include <iostream>
 #include <omp.h>
 
-#define NUM_ITER 1000000
+/* TODO: not sure whether this actually does something good */
+void yield() { asm("yield"); }
+
+#define NUM_ITER 1000000ULL
 
 
 /**
@@ -33,7 +37,7 @@ public:
         // try to take one from the free list
         elem_t* item = nullptr;
         /* try to get an element from the free-list */
-        while (free_list.get() != nullptr &&
+        while (free_list.get(std::memory_order_relaxed) != nullptr &&
                !std::atomic_mutate_explicit(free_list,
                 [&](elem_t* elem) -> std::optional<elem_t*> {
                     if (nullptr != elem) {
@@ -42,7 +46,7 @@ public:
                     }
                     return {}; // return empty
                 }, std::memory_order_acquire, std::memory_order_relaxed))
-        { }
+        { yield(); }
 
         if (!item) {
             // allocate new
@@ -57,13 +61,13 @@ public:
                     if (nullptr != elem) item->next = elem;
                     return item;
                 }, std::memory_order_relaxed, std::memory_order_release))
-        { }
+        { yield(); }
     }
 
     T* pop() {
         elem_t* item = nullptr;
         /* try to get a pointer from the head */
-        while (head.get() != nullptr &&
+        while (head.get(std::memory_order_relaxed) != nullptr &&
                !std::atomic_mutate_explicit(head,
                 [&](elem_t* elem) -> std::optional<elem_t*> {
                     if (nullptr != elem) {
@@ -72,7 +76,7 @@ public:
                     }
                     return {}; // empty
                 }, std::memory_order_acquire, std::memory_order_release))
-        { }
+        { yield(); }
         if (item) {
             /* put lifo element back on free list and return result */
             T* result = item->ptr;
@@ -83,7 +87,7 @@ public:
                         }
                         return item;
                     }, std::memory_order_relaxed, std::memory_order_release))
-            { }
+            { yield(); }
             return result;
         }
         // nothing to pop
@@ -96,16 +100,34 @@ static lifo<int> l;
 
 
 int main() {
-
     #pragma omp parallel
     {
+        std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
+
+#ifdef _OPENMP
+        int num_threads = omp_get_num_threads();
         int tid = omp_get_thread_num();
+#else
+        int num_threads = 1;
+        int tid = 0;
+#endif
+
+        #pragma omp barrier
+        beg = std::chrono::high_resolution_clock::now();
         #pragma omp for
-        for (std::size_t i = 0; i < NUM_ITER; ++i) {
+        for (std::size_t i = 0; i < NUM_ITER*num_threads; ++i) {
             l.push(&tid);
             l.pop();
         }
+        end = std::chrono::high_resolution_clock::now();
+        #pragma omp single
+        {
+            double elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
+            std::cout << "total time " << elapsed << " [us] ; avg "
+                      << elapsed / NUM_ITER / num_threads << " [us]" << std::endl;
+        }
     }
+
 
     return 0;
 }
