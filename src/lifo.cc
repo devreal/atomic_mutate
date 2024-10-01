@@ -11,12 +11,11 @@
 
 template<typename T>
 struct lifo_elem {
-    lifo_elem<T>* next;
-    T* ptr;
+    lifo_elem<T>* next = nullptr;
+    T* ptr = nullptr;
 
     lifo_elem(T* p)
-    : next()
-    , ptr(p)
+    : ptr(p)
     { }
 };
 
@@ -34,7 +33,7 @@ public:
         // try to take one from the free list
         elem_t* item = nullptr;
         /* try to get an element from the free-list */
-        while (head.get() != nullptr &&
+        while (free_list.get() != nullptr &&
                !std::atomic_mutate_explicit(free_list,
                 [&](elem_t* elem) -> std::optional<elem_t*> {
                     if (nullptr != elem) {
