@@ -11,6 +11,18 @@
 
 namespace std {
 
+    namespace detail {
+        /* dirty little helper: there is currently no way to get
+         * a pointer to the underlying data of a std::atomic;
+         * for ll/sc however we need access to that pointer,
+         * so use reinterpret_cast to cast away the atomic.
+         * This would not become a public interface. */
+        template<typename T>
+        T* atomic_get_ptr(std::atomic<T>& a) {
+            return reinterpret_cast<T*>(&a);
+        }
+    } // namespace detail
+
 #ifndef USE_LL_SC
 
     /**
@@ -33,16 +45,6 @@ namespace std {
 
     namespace detail {
 
-        /* dirty little helper: there is currently no way to get
-         * a pointer to the underlying data of a std::atomic;
-         * for ll/sc however we need access to that pointer,
-         * so use reinterpret_cast to cast away the atomic.
-         * This would not become a public interface. */
-        template<typename T>
-        T* atomic_get_ptr(std::atomic<T>& a) {
-            return reinterpret_cast<T*>(&a);
-        }
-
         template<typename T>
         inline T atomic_ll(const T* ptr) {
             static_assert(sizeof(T) == 4 || sizeof(T) == 8);
@@ -63,7 +65,7 @@ namespace std {
             if constexpr(sizeof(T) == 4) {
                 __asm__ __volatile__("stlxr    %w0, %w2, [%1]     \n"
                                         : "=&r"(ret)
-                                        : "r"(ptr), "r"(&newval)
+                                        : "r"(ptr), "r"(newval)
                                         : "cc", "memory");
             } else {
 
@@ -119,12 +121,12 @@ namespace std {
     private:
         union data {
             struct { // anonymous struct
-                T* ptr = nullptr;
-                intptr_t __fluff = 0;
+                T* ptr;
+                intptr_t __fluff;
             };
             // TODO: handle 32bit archs
             // atomic access to the ptr+fluff
-            __int128_t __aba;
+            __int128_t __aba = 0;
             data() = default;
 
             data(const __int128_t& aba)
@@ -160,8 +162,14 @@ namespace std {
             return {d.__aba};
         }
 
-        T* get(std::memory_order load_order = std::memory_order_seq_cst) const {
-            return u.load(load_order).ptr;
+        T* get(std::memory_order load_order = std::memory_order_seq_cst) {
+            std::atomic_thread_fence(load_order);
+            return detail::atomic_get_ptr(u)->ptr;
+        }
+
+        const T* get(std::memory_order load_order = std::memory_order_seq_cst) const {
+            std::atomic_thread_fence(load_order);
+            return detail::atomic_get_ptr(u)->ptr;
         }
     };
 
