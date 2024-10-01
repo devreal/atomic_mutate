@@ -42,6 +42,25 @@ instructions (arm, RISC-V, PowerPC).
 The implementation of `std::atomic_mutate` using LL/SC is currently
 enabled on arm64 and can be disabled by defining `ATOMIC_MUTATE_FORCE_CAS`.
 
+### Memory Model
+
+`std::atomic_mutate` defaults to sequential consistency for both the
+load and the subsequent store. This can be changed by using the
+`std::atomic_mutate_explicit` which takes two additional arguments
+for the load and store memory synchronization.
+
+For example, the following code performs the load with relaxed memory synchronization while performing a release when storing the result:
+
+```C
+std::atomic<int> a = 0;
+int v;
+while (!std::atomic_mutate_explicit(a, [&](int x){ v = (x+1) % THRESHOLD; return v; },
+                                    std::memory_order_relaxed,
+                                    std::memory_order_release))
+{ }
+return v;
+```
+
 ### Callable
 
 This prototype currently does not check for the restrictions that
