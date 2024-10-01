@@ -1,7 +1,7 @@
 
 #include "mutate.h"
 #include <iostream>
-#include <omp.h>
+#include <chrono>
 
 /* TODO: not sure whether this actually does something good */
 void yield() { asm("yield"); }
@@ -104,19 +104,13 @@ int main() {
     {
         std::chrono::time_point<std::chrono::high_resolution_clock> beg, end;
 
-#ifdef _OPENMP
-        int num_threads = omp_get_num_threads();
-        int tid = omp_get_thread_num();
-#else
-        int num_threads = 1;
-        int tid = 0;
-#endif
+        int val = 0;
 
         #pragma omp barrier
         beg = std::chrono::high_resolution_clock::now();
         #pragma omp for
-        for (std::size_t i = 0; i < NUM_ITER*num_threads; ++i) {
-            l.push(&tid);
+        for (std::size_t i = 0; i < NUM_ITER; ++i) {
+            l.push(&val);
             l.pop();
         }
         end = std::chrono::high_resolution_clock::now();
@@ -124,7 +118,7 @@ int main() {
         {
             double elapsed = (std::chrono::duration_cast<std::chrono::microseconds>(end - beg).count());
             std::cout << "total time " << elapsed << " [us] ; avg "
-                      << elapsed / NUM_ITER / num_threads << " [us]" << std::endl;
+                      << elapsed / NUM_ITER << " [us]" << std::endl;
         }
     }
 
