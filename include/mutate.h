@@ -45,19 +45,33 @@ namespace std {
 
         template<typename T>
         inline T atomic_ll(const T* ptr) {
+            static_assert(sizeof(T) == 4 || sizeof(T) == 8);
             T ret;
-            __asm__ __volatile__("ldaxr    %w0, [%1]          \n" : "=&r"(ret) : "r"(ptr));
+            if constexpr(sizeof(T) == 4) {
+                __asm__ __volatile__("ldaxr    %w0, [%1]          \n" : "=&r"(ret) : "r"(ptr));
+            } else {
+                __asm__ __volatile__("ldaxr    %0, [%1]          \n" : "=&r"(ret) : "r"(ptr));
+            }
             return ret;
         }
 
         template<typename T>
         inline bool atomic_sc(T* ptr, T newval) {
+            static_assert(sizeof(T) == 4 || sizeof(T) == 8);
             int ret;
 
-            __asm__ __volatile__("stlxr    %w0, %w2, [%1]     \n"
-                                    : "=&r"(ret)
-                                    : "r"(ptr), "r"(&newval)
-                                    : "cc", "memory");
+            if constexpr(sizeof(T) == 4) {
+                __asm__ __volatile__("stlxr    %w0, %w2, [%1]     \n"
+                                        : "=&r"(ret)
+                                        : "r"(ptr), "r"(&newval)
+                                        : "cc", "memory");
+            } else {
+
+                __asm__ __volatile__("stlxr    %w0, %2, [%1]     \n"
+                                        : "=&r"(ret)
+                                        : "r"(ptr), "r"(newval)
+                                        : "cc", "memory");
+            }
 
             return (ret == 0);
         }
@@ -105,8 +119,8 @@ namespace std {
     private:
         union data {
             struct { // anonymous struct
-                T* ptr;
-                intptr_t __fluff;
+                T* ptr = nullptr;
+                intptr_t __fluff = 0;
             };
             // TODO: handle 32bit archs
             // atomic access to the ptr+fluff
