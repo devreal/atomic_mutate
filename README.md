@@ -77,24 +77,6 @@ atomic variable or to abort the transaction by returning an empty
 optional.
 
 
-## `std::atomic_safe_ptr<T>`
 
-`std::atomic_safe_ptr<T>` addresses the ABA issue when dealing with
-pointers. It provides a wrapper around a pointer variable
-that can be used to safely modify that variable using `std::atomic_mutate`.
-On systems with 64bit word size and compare-exchange instructions, such modifications
-are performed using 128bit operands, incrementing
-a hidden counter that causes the compare-exchange to fail even if the
-current pointer is the same as the loaded one but modified
-by another thread in the meantime.
-When using LL/SC, the instruction set ensures failure upon concurrent
-writes and thus 64bit operands are used. The size of `std::atomic_safe_ptr`
-will still be 128bit on a 64bit machine.
 
-While technically two separate aspects, std::atomic_safe_ptr
-is a handy tool for implementing atomic data structures like LIFO
-using `std::atomic_mutate`, which would otherwise not be portable
-(i.e., `std::atomic_mutate` itself cannot address the ABA problem
-on all platforms).
 
-See `src/lifo.cc` for an example.
