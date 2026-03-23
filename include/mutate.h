@@ -5,7 +5,7 @@
 #include <cstdint>
 
 /* enable LL/SC on arm64 if the user didn't force CAS */
-#if !defined(USE_LL_SC) && defined(__aarch64__) && !defined(ATOMIC_MUTATE_FORCE_CAS)
+#if !defined(USE_LL_SC) && (defined(__aarch64__) || defined(__riscv__)) && !defined(ATOMIC_MUTATE_FORCE_CAS)
 #define USE_LL_SC 1
 #warning "Using LL/SC implementation of atomic_mutate on arm64"
 #endif
@@ -43,7 +43,7 @@ namespace std {
     template<typename Fn, typename T>
     inline void atomic_mutate(std::atomic<T>& a, Fn&& fn);
 
-#ifndef USE_LL_SC
+#if !defined(USE_LL_SC)
 
     /**
      * Implementation of atomic_mutate using compare-exchange.
@@ -76,6 +76,8 @@ namespace std {
     }
 
 #else  // USE_LL_SC
+
+#if defined(__aarch64__)
 
     namespace detail {
 
@@ -125,6 +127,47 @@ namespace std {
 
     } // namespace detail
 
+#elif defined(__riscv)
+
+    namespace detail {
+
+        template<typename T>
+        inline T atomic_ll(const T* ptr) {
+            static_assert(sizeof(T) == 4 || sizeof(T) == 8);
+            T ret;
+            if constexpr(sizeof(T) == 4) {
+                __asm__ __volatile__("lr.w.aq    %0, (%1)          \n" : "=&r"(ret) : "r"(ptr));
+            } else {
+                __asm__ __volatile__("lr.d.aq    %0, (%1)          \n" : "=&r"(ret) : "r"(ptr));
+            }
+            return ret;
+        }
+
+        template<typename T>
+        inline bool atomic_sc(T* ptr, T newval) {
+            static_assert(sizeof(T) == 4 || sizeof(T) == 8);
+            int ret;
+
+            if constexpr(sizeof(T) == 4) {
+                __asm__ __volatile__("sc.w.rl    %0, %2, (%1)     \n"
+                                        : "=&r"(ret)
+                                        : "r"(ptr), "r"(newval)
+                                        : "memory");
+            } else {
+                __asm__ __volatile__("sc.d.rl    %0, %2, (%1)     \n"
+                                        : "=&r"(ret)
+                                        : "r"(ptr), "r"(newval)
+                                        : "memory");
+            }
+
+            return (ret == 0);
+        }
+
+    } // namespace detail
+
+#endif // __aarch64__ || __riscv
+
+
     /**
      * Implementation of atomic_mutate using LL/SC.
      */
@@ -141,17 +184,17 @@ namespace std {
         bool success = false;
         do {
             auto val = detail::atomic_ll(aptr);
+            T newval;
+            std::atomic_thread_fence(store_order);
             if constexpr (std::is_same_v<R, T>) {
                 // if the function returns T, we can skip the optional wrapper
-                T newval = fn(val);
-                std::atomic_thread_fence(store_order);
-                success = detail::atomic_sc(aptr, newval);
+                newval = fn(val);
             } else {
                 std::optional<T> opt = fn(val);
                 if (!opt) return;
-                std::atomic_thread_fence(store_order);
-                success = detail::atomic_sc(aptr, opt.value());
+                newval = opt.value();
             }
+            success = detail::atomic_sc(aptr, newval);
         } while (!success);
     }
 
