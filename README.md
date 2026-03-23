@@ -182,6 +182,9 @@ A similar proposal was discussed on the std-discussion mailing list [5].
 And there's P2066  proposes an interface for using transactional memory, on systems that
 support it. [6]
 
+Jesus and Weiland's study suggests that the new arm atomic intrinsics do always provide performance benefits over LL/SC and may in some circumstances inhibit scaling [7].
+
+P3330 is a proposal similar to the one here. It's status is unclear at the moment [8].
 
 
 [1] https://codereview.qt-project.org/c/qt/qtbase/+/489704
@@ -190,3 +193,5 @@ support it. [6]
 [4] https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html
 [5] https://lists.isocpp.org/std-discussion/2024/05/2541.php
 [6] https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2021/p2066r5.html
+[7] Ricardo Jesus and Michèle Weiland. 2023. A Study on the Performance Implications of AArch64 Atomics. In High Performance Computing: 38th International Conference, ISC High Performance 2023, Hamburg, Germany, May 21–25, 2023, Proceedings. Springer-Verlag, Berlin, Heidelberg, 279–296. https://doi.org/10.1007/978-3-031-32041-5_15
+[8] https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2024/p3330r0.html
